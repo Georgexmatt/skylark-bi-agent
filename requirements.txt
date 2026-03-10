@@ -1,7 +1,6 @@
 streamlit
 pandas
 requests
-langchain
 langchain-experimental
 langchain-groq
 tabulate
