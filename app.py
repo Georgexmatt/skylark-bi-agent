@@ -21,7 +21,7 @@ def fetch_monday_data(board_id):
     query = f"""
     query {{
       boards(ids: {board_id}) {{
-        items_page(limit: 500) {{
+        items_page(limit: 200) {{
           items {{
             name
             column_values {{
@@ -65,12 +65,31 @@ def initialize_agent(selected_model="llama-3.3-70b-versatile"):
     deals_df = fetch_monday_data(DEALS_BOARD_ID)
     work_orders_df = fetch_monday_data(WORK_ORDERS_BOARD_ID)
     
-    # Initialize the Open Source LLM via Groq using the selected model variable
+    # Define essential BI columns (ensure these match your Monday.com column titles)
+    essential_deals = ['Item Name', 'Masked Deal value', 'Closure Probability', 'Deal Stage', 'Sector']
+    essential_work = ['Item Name', 'Status', 'Priority', 'Timeline']
+    
+    # Filter only if the columns exist to prevent errors
+    deals_slim = deals_df[[c for c in essential_deals if c in deals_df.columns]]
+    work_slim = work_orders_df[[c for c in essential_work if c in work_orders_df.columns]]
+    
     llm = ChatGroq(
         temperature=0, 
         groq_api_key=GROQ_API_KEY, 
         model_name=selected_model
     )
+    
+    # Pass the SLIM dataframes to the agent
+    agent = create_pandas_dataframe_agent(
+        llm, 
+        [deals_slim, work_slim], 
+        verbose=True,
+        allow_dangerous_code=True, 
+        prefix=custom_prefix,
+        max_iterations=30,
+        early_stopping_method="generate"
+    )
+    return agent
     
     # Enhanced prompt for better data resilience
     custom_prefix = """
