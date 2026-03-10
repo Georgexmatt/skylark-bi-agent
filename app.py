@@ -86,13 +86,16 @@ def initialize_agent(selected_model="llama-3.3-70b-versatile"):
     If data is heavily missing, state the caveats clearly, but ALWAYS attempt to provide an estimated numerical answer based on the cleanable data. Provide context and insights, not just raw numbers.
     """
 
-    # Create the BI Agent giving it access to both dataframes
+    # Create the BI Agent with an increased iteration limit
     agent = create_pandas_dataframe_agent(
         llm, 
         [deals_df, work_orders_df], 
         verbose=True,
         allow_dangerous_code=True, 
-        prefix=custom_prefix
+        prefix=custom_prefix,
+        max_iterations=30,  # Added this to prevent the "Agent stopped" error
+        early_stopping_method="generate" # Tells it to try and give an answer even if it's timing out
+    
     )
     return agent
 
