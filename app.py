@@ -60,16 +60,16 @@ def fetch_monday_data(board_id):
     return df
 
 # --- AGENT SETUP ---
-def initialize_agent():
+def initialize_agent(selected_model="llama-3.3-70b-versatile"):
     # Load the data
     deals_df = fetch_monday_data(DEALS_BOARD_ID)
     work_orders_df = fetch_monday_data(WORK_ORDERS_BOARD_ID)
     
-    # Initialize the Open Source LLM via Groq
+    # Initialize the Open Source LLM via Groq using the selected model variable
     llm = ChatGroq(
         temperature=0, 
         groq_api_key=GROQ_API_KEY, 
-        model_name="llama-3.3-70b-versatile"
+        model_name=selected_model
     )
     
     # Enhanced prompt for better data resilience
@@ -115,22 +115,58 @@ if prompt := st.chat_input("E.g., How's our pipeline looking for the energy sect
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # Generate response
+    # Generate response with Fallback Logic
     with st.chat_message("assistant"):
         with st.spinner("Analyzing business data..."):
+            output = ""
             try:
-                agent = initialize_agent()
+                # Attempt 1: Try the heavy reasoning model
+                agent = initialize_agent(selected_model="llama-3.3-70b-versatile")
                 response = agent.invoke(prompt)
                 output = response["output"]
+                
+            except Exception as e:
+                # If we hit a rate limit (429), trigger the transparent fallback
+                if "429" in str(e) or "rate_limit_exceeded" in str(e):
+                    st.warning("⚠️ API Rate Limit Reached for primary model. Automatically routing your query to the high-speed Llama 3.1 8B fallback model...")
+                    try:
+                        # Attempt 2: Fallback to the 8B model
+                        fallback_agent = initialize_agent(selected_model="llama-3.1-8b-instant")
+                        response = fallback_agent.invoke(prompt)
+                        output = response["output"]
+                    except Exception as fallback_e:
+                         output = f"System is currently experiencing extreme traffic. Please try again in a few minutes. (Error: {fallback_e})"
+                else:
+                    # If it's a different error, show it
+                    output = f"Data mapping error or API issue: {e}"
+            
+            # Display and save the final output
+            if output:
                 st.markdown(output)
                 st.session_state.messages.append({"role": "assistant", "content": output})
-            except Exception as e:
-                st.error(f"Data mapping error or API issue: {e}")
 
-# Optional Leadership Update Button
+# Optional Leadership Update Button with Fallback Logic
 if st.sidebar.button("Generate Leadership Update"):
     with st.spinner("Drafting executive summary..."):
-         agent = initialize_agent()
-         summary = agent.invoke("Generate a high-level executive summary of our current deal pipeline health and operational bottlenecks across all boards.")
-         st.sidebar.markdown("### Executive Summary")
-         st.sidebar.markdown(summary["output"])
+        summary_output = ""
+        prompt_text = "Generate a high-level executive summary of our current deal pipeline health and operational bottlenecks across all boards."
+        
+        try:
+            agent = initialize_agent(selected_model="llama-3.3-70b-versatile")
+            summary = agent.invoke(prompt_text)
+            summary_output = summary["output"]
+        except Exception as e:
+            if "429" in str(e) or "rate_limit_exceeded" in str(e):
+                st.sidebar.warning("⚠️ Primary model rate limit reached. Using fallback model...")
+                try:
+                    fallback_agent = initialize_agent(selected_model="llama-3.1-8b-instant")
+                    summary = fallback_agent.invoke(prompt_text)
+                    summary_output = summary["output"]
+                except Exception as fallback_e:
+                     summary_output = f"Error generating summary: {fallback_e}"
+            else:
+                 summary_output = f"Error generating summary: {e}"
+
+        if summary_output:
+            st.sidebar.markdown("### Executive Summary")
+            st.sidebar.markdown(summary_output)
