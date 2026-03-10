@@ -72,13 +72,27 @@ def initialize_agent():
         model_name="llama-3.3-70b-versatile"
     )
     
+    # Enhanced prompt for better data resilience
+    custom_prefix = """
+    You are a Business Intelligence AI for Skylark Drones. Answer founder-level questions. 
+    DataFrame df1 is Deals (Sales Pipeline). DataFrame df2 is Work Orders. 
+    
+    CRITICAL DATA CLEANING INSTRUCTIONS:
+    Before performing any calculations on columns like 'Masked Deal value', 'Closure Probability', or 'Budget':
+    1. Remove all string characters like '$', '%', 'TBD', 'Masked', and commas using pandas string manipulation.
+    2. Convert the column to numeric (float), forcing errors to NaN.
+    3. Fill missing or NaN numeric values with 0 or the median where appropriate.
+    
+    If data is heavily missing, state the caveats clearly, but ALWAYS attempt to provide an estimated numerical answer based on the cleanable data. Provide context and insights, not just raw numbers.
+    """
+
     # Create the BI Agent giving it access to both dataframes
     agent = create_pandas_dataframe_agent(
         llm, 
         [deals_df, work_orders_df], 
         verbose=True,
-        allow_dangerous_code=True, # Required for Pandas agent to execute data filters
-        prefix="You are a Business Intelligence AI for Skylark Drones. Answer founder-level questions. DataFrame df1 is Deals (Sales Pipeline). DataFrame df2 is Work Orders. If data is missing or messy, state the caveats clearly. Always provide context and insights, not just raw numbers."
+        allow_dangerous_code=True, 
+        prefix=custom_prefix
     )
     return agent
 
