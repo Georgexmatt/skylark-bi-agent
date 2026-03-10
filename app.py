@@ -94,6 +94,7 @@ def initialize_agent(selected_model="llama-3.3-70b-versatile"):
     )
     
     # 5. Create the Agent
+    # Final optimized Agent setup
     agent = create_pandas_dataframe_agent(
         llm, 
         [deals_slim, work_slim], 
@@ -101,7 +102,10 @@ def initialize_agent(selected_model="llama-3.3-70b-versatile"):
         allow_dangerous_code=True, 
         prefix=custom_prefix,
         max_iterations=30,
-        early_stopping_method="generate"
+        early_stopping_method="generate",
+        handle_parsing_errors=True, # The crucial fix for that error
+        include_df_in_prompt=True   # Gives the agent better context
+    
     )
     return agent
     
