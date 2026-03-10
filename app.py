@@ -60,52 +60,49 @@ def fetch_monday_data(board_id):
     return df
 
 # --- AGENT SETUP ---
+from langchain.agents.agent_types import AgentType
+
 def initialize_agent(selected_model="llama-3.3-70b-versatile"):
-    # 1. Define the prefix FIRST so it's always available
-    custom_prefix = """
-    You are a Business Intelligence AI for Skylark Drones. Answer founder-level questions. 
-    DataFrame df1 is Deals (Sales Pipeline). DataFrame df2 is Work Orders. 
+    # 1. Define a much stricter prompt
+    custom_prefix = """You are a BI Agent for Skylark Drones. 
+    You have access to two dataframes: df1 (Deals) and df2 (Work Orders).
     
-    CRITICAL DATA CLEANING INSTRUCTIONS:
-    Before performing any calculations on columns like 'Masked Deal value', 'Closure Probability', or 'Budget':
-    1. Remove all string characters like '$', '%', 'TBD', 'Masked', and commas using pandas string manipulation.
-    2. Convert the column to numeric (float), forcing errors to NaN.
-    3. Fill missing or NaN numeric values with 0 or the median where appropriate.
+    IMPORTANT: You must always use the following format:
+    Thought: you should always think about what to do
+    Action: the action to take (should be python_repl_ast)
+    Action Input: the input to the action (the python code)
+    Observation: the result of the action
+    ... (this Thought/Action/Action Input/Observation can repeat N times)
+    Thought: I now know the final answer
+    Final Answer: the final answer to the original input question
     
-    If data is heavily missing, state the caveats clearly, but ALWAYS attempt to provide an estimated numerical answer based on the cleanable data. Provide context and insights, not just raw numbers.
+    Before math, clean columns (remove $, %, commas) and convert to numeric.
+    If you hit an error, explain the data caveat but try to provide an estimate.
     """
 
-    # 2. Load the data
+    # 2. Load and slim data (Limit 200)
     deals_df = fetch_monday_data(DEALS_BOARD_ID)
     work_orders_df = fetch_monday_data(WORK_ORDERS_BOARD_ID)
     
-    # 3. Slim the data to save tokens (keeps 200 rows but fewer columns)
     essential_deals = ['Item Name', 'Masked Deal value', 'Closure Probability', 'Deal Stage', 'Sector']
     essential_work = ['Item Name', 'Status', 'Priority', 'Timeline']
     
     deals_slim = deals_df[[c for c in essential_deals if c in deals_df.columns]]
     work_slim = work_orders_df[[c for c in essential_work if c in work_orders_df.columns]]
     
-    # 4. Setup the LLM
-    llm = ChatGroq(
-        temperature=0, 
-        groq_api_key=GROQ_API_KEY, 
-        model_name=selected_model
-    )
+    # 3. Setup LLM
+    llm = ChatGroq(temperature=0, groq_api_key=GROQ_API_KEY, model_name=selected_model)
     
-    # 5. Create the Agent
-    # Final optimized Agent setup
+    # 4. Create the Agent with the more stable "ZERO_SHOT_REACT" type
     agent = create_pandas_dataframe_agent(
         llm, 
         [deals_slim, work_slim], 
         verbose=True,
         allow_dangerous_code=True, 
         prefix=custom_prefix,
-        max_iterations=30,
-        early_stopping_method="generate",
-        handle_parsing_errors=True, # The crucial fix for that error
-        include_df_in_prompt=True   # Gives the agent better context
-    
+        max_iterations=20,
+        handle_parsing_errors=True,
+        agent_type=AgentType.ZERO_SHOT_REACT_DESCRIPTION # Stricter structure for Llama
     )
     return agent
     
