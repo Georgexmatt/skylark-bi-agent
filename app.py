@@ -69,7 +69,7 @@ def initialize_agent():
     llm = ChatGroq(
         temperature=0, 
         groq_api_key=GROQ_API_KEY, 
-        model_name="llama3-70b-8192"
+        model_name="llama-3.3-70b-versatile"
     )
     
     # Create the BI Agent giving it access to both dataframes
