@@ -15,7 +15,6 @@ WORK_ORDERS_BOARD_ID = st.secrets["WORK_ORDERS_BOARD_ID"]
 @st.cache_data(ttl=600)
 def fetch_monday_data(board_id):
     headers = {"Authorization": MONDAY_TOKEN, "API-Version": "2024-01"}
-    # Using a 200-row limit to balance data volume and token usage
     query = f"""
     query {{
       boards(ids: {board_id}) {{
@@ -48,7 +47,6 @@ def initialize_agent(selected_model="llama-3.3-70b-versatile"):
     deals_df = fetch_monday_data(DEALS_BOARD_ID)
     work_orders_df = fetch_monday_data(WORK_ORDERS_BOARD_ID)
     
-    # SLIMMING: Only pass business-critical columns to the LLM to save tokens
     essential_deals = ['Item Name', 'Masked Deal value', 'Closure Probability', 'Deal Stage', 'Sector']
     essential_work = ['Item Name', 'Status', 'Priority', 'Timeline']
     
@@ -64,52 +62,65 @@ def initialize_agent(selected_model="llama-3.3-70b-versatile"):
     """
 
     return create_pandas_dataframe_agent(
-        llm, 
-        [deals_slim, work_slim], 
-        verbose=True, 
-        allow_dangerous_code=True, 
-        prefix=custom_prefix,
-        max_iterations=15,
-        handle_parsing_errors=True
+        llm, [deals_slim, work_slim], verbose=True, allow_dangerous_code=True, 
+        prefix=custom_prefix, max_iterations=15, handle_parsing_errors=True
     )
 
 # --- UI FRONTEND ---
 st.set_page_config(page_title="Skylark BI Agent", page_icon="📊")
 st.title("📊 Skylark Drones BI Executive Agent")
 
+# Sidebar for Quick Actions
+st.sidebar.title("💡 Suggested Questions")
+st.sidebar.write("Click a question below to test the agent:")
+
+# We use session state to handle button clicks as prompts
+if "input_value" not in st.session_state:
+    st.session_state.input_value = ""
+
+# List of smart questions
+q1 = "What is the total value of our 'Won' deals in the Energy sector?"
+q2 = "How many work orders are currently marked as 'Stuck'?"
+q3 = "Calculate the weighted average deal value for the energy sector considering closure probability."
+
+if st.sidebar.button(q1): st.session_state.input_value = q1
+if st.sidebar.button(q2): st.session_state.input_value = q2
+if st.sidebar.button(q3): st.session_state.input_value = q3
+
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
 for m in st.session_state.messages:
-    with st.chat_message(m["role"]):
-        st.markdown(m["content"])
+    with st.chat_message(m["role"]): st.markdown(m["content"])
 
-if prompt := st.chat_input("Ask about sales pipeline or work orders..."):
+# Handle both typed input and button clicks
+prompt = st.chat_input("Ask about sales pipeline or work orders...")
+if st.session_state.input_value:
+    prompt = st.session_state.input_value
+    st.session_state.input_value = "" # Reset after use
+
+if prompt:
     st.session_state.messages.append({"role": "user", "content": prompt})
-    with st.chat_message("user"):
-        st.markdown(prompt)
+    with st.chat_message("user"): st.markdown(prompt)
 
     with st.chat_message("assistant"):
         with st.spinner("Analyzing data..."):
             output = ""
             try:
-                # Attempt 1: Try the heavy reasoning model
                 agent = initialize_agent(selected_model="llama-3.3-70b-versatile")
                 response = agent.invoke(prompt)
                 output = response["output"]
             except Exception as e:
-                # Check for Rate Limit (429) or Request Size (413) errors
                 if any(err in str(e) for err in ["429", "rate_limit", "413"]):
-                    st.warning("🔄 Primary model busy. Switching to high-speed fallback...")
+                    st.warning("🔄 Primary model busy. Switching to fallback...")
                     try:
-                        # Attempt 2: Fallback to the high-availability 8B model
                         agent = initialize_agent(selected_model="llama-3.1-8b-instant")
                         response = agent.invoke(prompt)
                         output = response["output"]
                     except Exception as fallback_e:
-                        output = f"The system is currently under heavy load. Please try again in a few minutes. (Error: {fallback_e})"
+                        output = f"System under load. Try again soon. (Error: {fallback_e})"
                 else:
-                    output = f"Data mapping error or API issue: {e}"
+                    output = f"Error: {e}"
             
             st.markdown(output)
             st.session_state.messages.append({"role": "assistant", "content": output})
