@@ -3,3 +3,4 @@ pandas
 langchain-experimental
 langchain-groq
 requests
+tabulate
