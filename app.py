@@ -61,25 +61,39 @@ def fetch_monday_data(board_id):
 
 # --- AGENT SETUP ---
 def initialize_agent(selected_model="llama-3.3-70b-versatile"):
-    # Load the data
+    # 1. Define the prefix FIRST so it's always available
+    custom_prefix = """
+    You are a Business Intelligence AI for Skylark Drones. Answer founder-level questions. 
+    DataFrame df1 is Deals (Sales Pipeline). DataFrame df2 is Work Orders. 
+    
+    CRITICAL DATA CLEANING INSTRUCTIONS:
+    Before performing any calculations on columns like 'Masked Deal value', 'Closure Probability', or 'Budget':
+    1. Remove all string characters like '$', '%', 'TBD', 'Masked', and commas using pandas string manipulation.
+    2. Convert the column to numeric (float), forcing errors to NaN.
+    3. Fill missing or NaN numeric values with 0 or the median where appropriate.
+    
+    If data is heavily missing, state the caveats clearly, but ALWAYS attempt to provide an estimated numerical answer based on the cleanable data. Provide context and insights, not just raw numbers.
+    """
+
+    # 2. Load the data
     deals_df = fetch_monday_data(DEALS_BOARD_ID)
     work_orders_df = fetch_monday_data(WORK_ORDERS_BOARD_ID)
     
-    # Define essential BI columns (ensure these match your Monday.com column titles)
+    # 3. Slim the data to save tokens (keeps 200 rows but fewer columns)
     essential_deals = ['Item Name', 'Masked Deal value', 'Closure Probability', 'Deal Stage', 'Sector']
     essential_work = ['Item Name', 'Status', 'Priority', 'Timeline']
     
-    # Filter only if the columns exist to prevent errors
     deals_slim = deals_df[[c for c in essential_deals if c in deals_df.columns]]
     work_slim = work_orders_df[[c for c in essential_work if c in work_orders_df.columns]]
     
+    # 4. Setup the LLM
     llm = ChatGroq(
         temperature=0, 
         groq_api_key=GROQ_API_KEY, 
         model_name=selected_model
     )
     
-    # Pass the SLIM dataframes to the agent
+    # 5. Create the Agent
     agent = create_pandas_dataframe_agent(
         llm, 
         [deals_slim, work_slim], 
